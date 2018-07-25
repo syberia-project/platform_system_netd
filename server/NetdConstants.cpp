@@ -112,7 +112,7 @@ int parsePrefix(const char *prefix, uint8_t *family, void *address, int size, ui
     addrinfo hints = {
         .ai_flags = AI_NUMERICHOST,
     };
-    int ret = getaddrinfo(addressString.c_str(), NULL, &hints, &res);
+    int ret = getaddrinfo(addressString.c_str(), nullptr, &hints, &res);
     if (ret || !res) {
         return -EINVAL;  // getaddrinfo return values are not errno values.
     }
@@ -162,7 +162,7 @@ void blockSigpipe() {
 
     sigemptyset(&mask);
     sigaddset(&mask, SIGPIPE);
-    if (sigprocmask(SIG_BLOCK, &mask, NULL) != 0)
+    if (sigprocmask(SIG_BLOCK, &mask, nullptr) != 0)
         ALOGW("WARNING: SIGPIPE not blocked\n");
 }
 
