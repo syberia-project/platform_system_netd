@@ -65,6 +65,39 @@ TEST_F(OffloadUtilsTest, HardwareAddressTypeOfCellular) {
     ASSERT_EQ(ARPHRD_RAWIP, type);
 }
 
+TEST_F(OffloadUtilsTest, IsEthernetOfNonExistingIf) {
+    auto res = isEthernet("not_existing_if");
+    ASSERT_FALSE(res.ok());
+    ASSERT_EQ(ENODEV, res.error().code());
+}
+
+TEST_F(OffloadUtilsTest, IsEthernetOfLoopback) {
+    auto res = isEthernet("lo");
+    ASSERT_FALSE(res.ok());
+    ASSERT_EQ(EAFNOSUPPORT, res.error().code());
+}
+
+// If wireless 'wlan0' interface exists it should be Ethernet.
+// See also HardwareAddressTypeOfWireless.
+TEST_F(OffloadUtilsTest, IsEthernetOfWireless) {
+    auto res = isEthernet("wlan0");
+    if (!res.ok() && res.error().code() == ENODEV) return;
+
+    ASSERT_RESULT_OK(res);
+    ASSERT_TRUE(res.value());
+}
+
+// If cellular 'rmnet_data0' interface exists it should
+// *probably* not be Ethernet and instead be RawIp.
+// See also HardwareAddressTypeOfCellular.
+TEST_F(OffloadUtilsTest, IsEthernetOfCellular) {
+    auto res = isEthernet("rmnet_data0");
+    if (!res.ok() && res.error().code() == ENODEV) return;
+
+    ASSERT_RESULT_OK(res);
+    ASSERT_FALSE(res.value());
+}
+
 TEST_F(OffloadUtilsTest, GetClatEgressMapFd) {
     SKIP_IF_BPF_NOT_SUPPORTED;
 
@@ -76,7 +109,7 @@ TEST_F(OffloadUtilsTest, GetClatEgressMapFd) {
 TEST_F(OffloadUtilsTest, GetClatEgressRawIpProgFd) {
     SKIP_IF_BPF_NOT_SUPPORTED;
 
-    int fd = getClatEgressProgFd(false);
+    int fd = getClatEgressProgFd(RAWIP);
     ASSERT_LE(3, fd);
     close(fd);
 }
@@ -84,7 +117,7 @@ TEST_F(OffloadUtilsTest, GetClatEgressRawIpProgFd) {
 TEST_F(OffloadUtilsTest, GetClatEgressEtherProgFd) {
     SKIP_IF_BPF_NOT_SUPPORTED;
 
-    int fd = getClatEgressProgFd(true);
+    int fd = getClatEgressProgFd(ETHER);
     ASSERT_LE(3, fd);
     close(fd);
 }
@@ -100,7 +133,7 @@ TEST_F(OffloadUtilsTest, GetClatIngressMapFd) {
 TEST_F(OffloadUtilsTest, GetClatIngressRawIpProgFd) {
     SKIP_IF_BPF_NOT_SUPPORTED;
 
-    int fd = getClatIngressProgFd(false);
+    int fd = getClatIngressProgFd(RAWIP);
     ASSERT_LE(3, fd);
     close(fd);
 }
@@ -108,7 +141,7 @@ TEST_F(OffloadUtilsTest, GetClatIngressRawIpProgFd) {
 TEST_F(OffloadUtilsTest, GetClatIngressEtherProgFd) {
     SKIP_IF_BPF_NOT_SUPPORTED;
 
-    int fd = getClatIngressProgFd(true);
+    int fd = getClatIngressProgFd(ETHER);
     ASSERT_LE(3, fd);
     close(fd);
 }
@@ -126,7 +159,7 @@ TEST_F(OffloadUtilsTest, GetTetherIngressRawIpProgFd) {
     // RX Rawip -> TX Ether requires header adjustments and thus 4.14.
     SKIP_IF_EXTENDED_BPF_NOT_SUPPORTED;
 
-    int fd = getTetherIngressProgFd(false);
+    int fd = getTetherIngressProgFd(RAWIP);
     ASSERT_LE(3, fd);
     close(fd);
 }
@@ -136,7 +169,7 @@ TEST_F(OffloadUtilsTest, GetTetherIngressEtherProgFd) {
     // RX Ether -> TX Ether does not require header adjustments
     SKIP_IF_BPF_NOT_SUPPORTED;
 
-    int fd = getTetherIngressProgFd(true);
+    int fd = getTetherIngressProgFd(ETHER);
     ASSERT_LE(3, fd);
     close(fd);
 }
@@ -214,12 +247,18 @@ static void checkAttachDetachBpfFilterClsactLo(const bool ingress, const bool et
     if (!kernelSupportsNetSchIngress()) return;
     if (!kernelSupportsNetClsBpf()) return;
 
+    const bool extended = (android::bpf::getBpfSupportLevel() >= android::bpf::BpfLevel::EXTENDED);
     // 4.9 returns EINVAL instead of ENOENT...
-    const int errNOENT =
-            (android::bpf::getBpfSupportLevel() == android::bpf::BpfLevel::BASIC) ? EINVAL : ENOENT;
+    const int errNOENT = extended ? ENOENT : EINVAL;
 
-    int bpf_fd = ingress ? getClatIngressProgFd(ethernet) : getClatEgressProgFd(ethernet);
-    ASSERT_LE(3, bpf_fd);
+    int clatBpfFd = ingress ? getClatIngressProgFd(ethernet) : getClatEgressProgFd(ethernet);
+    ASSERT_LE(3, clatBpfFd);
+
+    int tetherBpfFd = -1;
+    if (extended && ingress) {
+        tetherBpfFd = getTetherIngressProgFd(ethernet);
+        ASSERT_LE(3, tetherBpfFd);
+    }
 
     // This attaches and detaches a clsact plus ebpf program to loopback
     // interface, but it should not affect traffic by virtue of us not
@@ -231,10 +270,14 @@ static void checkAttachDetachBpfFilterClsactLo(const bool ingress, const bool et
     EXPECT_EQ(-errNOENT, tcFilterDelDevIngressClatIpv6(LOOPBACK_IFINDEX));
     EXPECT_EQ(-errNOENT, tcFilterDelDevEgressClatIpv4(LOOPBACK_IFINDEX));
     if (ingress) {
-        EXPECT_EQ(0, tcFilterAddDevIngressBpf(LOOPBACK_IFINDEX, bpf_fd, ethernet));
+        EXPECT_EQ(0, tcFilterAddDevIngressClatIpv6(LOOPBACK_IFINDEX, clatBpfFd, ethernet));
+        if (extended) {
+            EXPECT_EQ(0, tcFilterAddDevIngressTether(LOOPBACK_IFINDEX, tetherBpfFd, ethernet));
+            EXPECT_EQ(0, tcFilterDelDevIngressTether(LOOPBACK_IFINDEX));
+        }
         EXPECT_EQ(0, tcFilterDelDevIngressClatIpv6(LOOPBACK_IFINDEX));
     } else {
-        EXPECT_EQ(0, tcFilterAddDevEgressBpf(LOOPBACK_IFINDEX, bpf_fd, ethernet));
+        EXPECT_EQ(0, tcFilterAddDevEgressClatIpv4(LOOPBACK_IFINDEX, clatBpfFd, ethernet));
         EXPECT_EQ(0, tcFilterDelDevEgressClatIpv4(LOOPBACK_IFINDEX));
     }
     EXPECT_EQ(-errNOENT, tcFilterDelDevIngressClatIpv6(LOOPBACK_IFINDEX));
@@ -243,23 +286,24 @@ static void checkAttachDetachBpfFilterClsactLo(const bool ingress, const bool et
     EXPECT_EQ(-EINVAL, tcFilterDelDevIngressClatIpv6(LOOPBACK_IFINDEX));
     EXPECT_EQ(-EINVAL, tcFilterDelDevEgressClatIpv4(LOOPBACK_IFINDEX));
 
-    close(bpf_fd);
+    if (tetherBpfFd != -1) close(tetherBpfFd);
+    close(clatBpfFd);
 }
 
 TEST_F(OffloadUtilsTest, CheckAttachBpfFilterRawIpClsactEgressLo) {
-    checkAttachDetachBpfFilterClsactLo(/*ingress*/ false, /*ethernet*/ false);
+    checkAttachDetachBpfFilterClsactLo(EGRESS, RAWIP);
 }
 
 TEST_F(OffloadUtilsTest, CheckAttachBpfFilterEthernetClsactEgressLo) {
-    checkAttachDetachBpfFilterClsactLo(/*ingress*/ false, /*ethernet*/ true);
+    checkAttachDetachBpfFilterClsactLo(EGRESS, ETHER);
 }
 
 TEST_F(OffloadUtilsTest, CheckAttachBpfFilterRawIpClsactIngressLo) {
-    checkAttachDetachBpfFilterClsactLo(/*ingress*/ true, /*ethernet*/ false);
+    checkAttachDetachBpfFilterClsactLo(INGRESS, RAWIP);
 }
 
 TEST_F(OffloadUtilsTest, CheckAttachBpfFilterEthernetClsactIngressLo) {
-    checkAttachDetachBpfFilterClsactLo(/*ingress*/ true, /*ethernet*/ true);
+    checkAttachDetachBpfFilterClsactLo(INGRESS, ETHER);
 }
 
 }  // namespace net
