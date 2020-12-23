@@ -1061,10 +1061,6 @@ interface INetd {
     const String IF_FLAG_RUNNING = "running";
     const String IF_FLAG_MULTICAST = "multicast";
 
-    // Specify ISOLATED chain (fw_isolated) which is used to unconditionally block all app
-    // network access.
-    const int FIREWALL_CHAIN_ISOLATED = 4;
-
    /**
     * Get interface configuration
     *
@@ -1313,27 +1309,4 @@ interface INetd {
      *                                  cause of the failure.
      */
      TetherStatsParcel tetherOffloadGetAndClearStats(int ifIndex);
-
-    /* Add a network traffic restriction to/from an interface for a specific app
-    *
-    * @param usecase caller usecase
-    * @param ifName interface name
-    * @param uid uid of target app
-    * @throws ServiceSpecificException in case of failure, with an error code indicating the
-    *         cause of the failure.
-    */
-    void bandwidthAddRestrictAppOnInterface(in @utf8InCpp String usecase,
-            in @utf8InCpp String ifName, int uid);
-
-   /**
-    * Remove a network traffic restriction to/from an interface for a specific app
-    *
-    * @param usecase caller usecase
-    * @param ifName interface name
-    * @param uid uid of target app
-    * @throws ServiceSpecificException in case of failure, with an error code indicating the
-    *         cause of the failure.
-    */
-    void bandwidthRemoveRestrictAppOnInterface(in @utf8InCpp String usecase,
-            in @utf8InCpp String ifName, int uid);
 }

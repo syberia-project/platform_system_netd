@@ -122,8 +122,6 @@ interface INetd {
   android.net.TetherStatsParcel[] tetherOffloadGetStats();
   void tetherOffloadSetInterfaceQuota(int ifIndex, long quotaBytes);
   android.net.TetherStatsParcel tetherOffloadGetAndClearStats(int ifIndex);
-  void bandwidthAddRestrictAppOnInterface(in @utf8InCpp String usecase, in @utf8InCpp String ifName, int uid);
-  void bandwidthRemoveRestrictAppOnInterface(in @utf8InCpp String usecase, in @utf8InCpp String ifName, int uid);
   const int IPV4 = 4;
   const int IPV6 = 6;
   const int CONF = 1;
@@ -163,5 +161,4 @@ interface INetd {
   const String IF_FLAG_POINTOPOINT = "point-to-point";
   const String IF_FLAG_RUNNING = "running";
   const String IF_FLAG_MULTICAST = "multicast";
-  const int FIREWALL_CHAIN_ISOLATED = 4;
 }
