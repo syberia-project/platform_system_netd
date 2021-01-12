@@ -201,6 +201,7 @@ TEST_F(OffloadUtilsTest, GetTetherLimitMapFd) {
     close(fd);
 }
 
+<<<<<<< HEAD
 // The SKIP_IF_BPF_NOT_SUPPORTED macro is effectively a check for 4.9+ kernel
 // combined with a launched on P device.  Ie. it's a test for 4.9-P or better.
 
@@ -243,15 +244,20 @@ bool kernelSupportsNetClsBpf(void) {
     return doKernelSupportsNetClsBpf() == W_EXITCODE(0, 0);
 }
 
+=======
+>>>>>>> 15215e84... Clat eBPF is always enabled (and required)
 // See Linux kernel source in include/net/flow.h
 #define LOOPBACK_IFINDEX 1
 
 TEST_F(OffloadUtilsTest, AttachReplaceDetachClsactLo) {
+<<<<<<< HEAD
     // Technically does not depend on ebpf, but does depend on clsact,
     // and we do not really care if it works on pre-4.9-Q anyway.
     SKIP_IF_BPF_NOT_SUPPORTED;
     if (!kernelSupportsNetSchIngress()) return;
 
+=======
+>>>>>>> 15215e84... Clat eBPF is always enabled (and required)
     // This attaches and detaches a configuration-less and thus no-op clsact
     // qdisc to loopback interface (and it takes fractions of a second)
     EXPECT_EQ(0, tcQdiscAddDevClsact(LOOPBACK_IFINDEX));
@@ -261,11 +267,14 @@ TEST_F(OffloadUtilsTest, AttachReplaceDetachClsactLo) {
 }
 
 static void checkAttachDetachBpfFilterClsactLo(const bool ingress, const bool ethernet) {
+<<<<<<< HEAD
     // This test requires kernel 4.9-Q or better
     SKIP_IF_BPF_NOT_SUPPORTED;
     if (!kernelSupportsNetSchIngress()) return;
     if (!kernelSupportsNetClsBpf()) return;
 
+=======
+>>>>>>> 15215e84... Clat eBPF is always enabled (and required)
     const bool extended =
             (android::bpf::getBpfSupportLevel() >= android::bpf::BpfLevel::EXTENDED_4_14);
     // Older kernels return EINVAL instead of ENOENT due to lacking proper error propagation...
